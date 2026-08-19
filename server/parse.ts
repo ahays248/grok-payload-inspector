@@ -171,12 +171,37 @@ export function parseTurnFromRequest(args: {
   };
 }
 
+export function isUserMessage(m: { role?: string; type?: string }): boolean {
+  const role = (m.role ?? "").toLowerCase();
+  const type = (m.type ?? "").toLowerCase();
+  if (role === "user" || role === "human") return true;
+  if (
+    role === "assistant" ||
+    role === "tool" ||
+    role === "system" ||
+    role === "developer" ||
+    role === "function"
+  ) {
+    return false;
+  }
+  if (
+    type === "function_call" ||
+    type === "function_call_output" ||
+    type === "tool_use" ||
+    type === "tool_result"
+  ) {
+    return false;
+  }
+  // Responses API sometimes omits role on message / input_text items.
+  return type === "message" || type === "input_text";
+}
+
 export function conversationFingerprint(messages: ChatMessage[]): {
   lastUserText: string;
   userMessageCount: number;
   groupKey: string;
 } {
-  const users = messages.filter((m) => m.role === "user");
+  const users = messages.filter((m) => isUserMessage(m));
   const lastUserText = (users[users.length - 1]?.text ?? "").replace(/\s+/g, " ").trim();
   const userMessageCount = users.length;
   const preview = lastUserText.slice(0, 240);
@@ -242,7 +267,7 @@ export function applyResponse(turn: Turn, raw: string): Turn {
 }
 
 export function summarizePreview(turn: Pick<Turn, "messages" | "path">): string {
-  const user = [...turn.messages].reverse().find((m) => m.role === "user");
+  const user = [...turn.messages].reverse().find((m) => isUserMessage(m));
   if (user?.text) {
     const line = user.text.replace(/\s+/g, " ").trim();
     return line.length > 80 ? `${line.slice(0, 77)}…` : line;
@@ -300,18 +325,19 @@ function collectMessages(j: Record<string, unknown>): ChatMessage[] {
         type?: string;
         role?: string;
         content?: unknown;
+        text?: string;
         name?: string;
         arguments?: string;
         output?: unknown;
       };
-      if (it.role === "system" || it.type === "system") continue;
-      let text = flattenContent(it.content);
+      if (it.role === "system" || it.type === "system" || it.role === "developer") continue;
+      let text = itemText(it);
       if (it.type === "function_call") {
         text = `${it.name ?? "tool"}(${it.arguments ?? ""})`;
       } else if (it.type === "function_call_output") {
         text = typeof it.output === "string" ? it.output : JSON.stringify(it.output, null, 2);
       }
-      const role = it.role ?? it.type ?? "item";
+      const role = it.role ?? (it.type === "message" || it.type === "input_text" ? "user" : it.type) ?? "item";
       out.push({
         role,
         type: it.type,
@@ -511,6 +537,11 @@ function sliceTitle(text: string, index: number): string {
   const first = text.split("\n")[0].trim();
   if (first.length > 0 && first.length < 60) return first.replace(/[:#*]/g, "").trim();
   return `Section ${index + 1}`;
+}
+
+function itemText(it: { text?: unknown; content?: unknown }): string {
+  if (typeof it.text === "string" && it.text.trim()) return it.text;
+  return flattenContent(it.content);
 }
 
 function flattenContent(content: unknown): string {

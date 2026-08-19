@@ -36,38 +36,34 @@ export function chronological<T extends { timestamp: string }>(items: T[]): T[] 
   return items.slice().sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
+/** Auto-title / empty-fingerprint calls ride along with the typed message. */
+const SIDECAR_WINDOW_MS = 90_000;
+/** Parallel POSTs Grok fires the moment you hit enter. */
+const BURST_WINDOW_MS = 5_000;
+
+type WalkGroup = UserTurnGroup & {
+  lastUserText: string;
+  userMessageCount: number;
+};
+
 /**
- * Consecutive API calls that share a groupKey are one user turn
- * (the tool-loop after one typed message). A new user message bumps
- * userMessageCount, so a later identical "Hello!" is a new group.
+ * One typed message, plus every model call until the user types again.
+ * Grok often fires extra POSTs on a single Hello! (auto-title, empty-input
+ * probes). Those must not become their own sidebar rows.
  */
 export function groupUserTurns(summaries: TurnSummary[]): UserTurnGroup[] {
   const ordered = chronological(summaries);
-  const groups: UserTurnGroup[] = [];
+  const groups: WalkGroup[] = [];
   for (const s of ordered) {
     const current = groups[groups.length - 1];
-    if (current && current.groupKey === s.groupKey) {
-      current.callIds.push(s.id);
-      current.callCount += 1;
-      current.billedTokens += s.totals.total;
-      current.lastTimestamp = s.timestamp;
-      current.latestTokens = s.totals.total;
-      current.latestTotals = s.totals;
-      current.model = s.model;
-      if (s.status === "in_flight" || current.status === "in_flight") {
-        current.status = "in_flight";
-      } else if (s.status === "error") {
-        current.status = "error";
-      } else if (current.status !== "error") {
-        current.status = s.status;
-      }
-      if (s.preview && s.preview !== s.path) current.preview = s.preview;
+    if (current && shouldAttach(current, s)) {
+      attach(current, s);
       continue;
     }
     groups.push({
       id: `g-${s.id}`,
       groupKey: s.groupKey,
-      preview: s.preview || s.lastUserText || s.path,
+      preview: displayPreview(s),
       timestamp: s.timestamp,
       lastTimestamp: s.timestamp,
       callCount: 1,
@@ -77,9 +73,105 @@ export function groupUserTurns(summaries: TurnSummary[]): UserTurnGroup[] {
       callIds: [s.id],
       status: s.status,
       model: s.model,
+      lastUserText: s.lastUserText,
+      userMessageCount: s.userMessageCount,
     });
   }
-  return groups.slice().reverse();
+  return groups.map(toPublicGroup).reverse();
+}
+
+function toPublicGroup(g: WalkGroup): UserTurnGroup {
+  return {
+    id: g.id,
+    groupKey: g.groupKey,
+    preview: g.preview,
+    timestamp: g.timestamp,
+    lastTimestamp: g.lastTimestamp,
+    callCount: g.callCount,
+    billedTokens: g.billedTokens,
+    latestTokens: g.latestTokens,
+    latestTotals: g.latestTotals,
+    callIds: g.callIds,
+    status: g.status,
+    model: g.model,
+  };
+}
+
+function shouldAttach(current: WalkGroup, s: TurnSummary): boolean {
+  if (current.groupKey === s.groupKey) return true;
+  if (
+    current.lastUserText &&
+    s.lastUserText === current.lastUserText &&
+    s.userMessageCount === current.userMessageCount
+  ) {
+    return true;
+  }
+  const newTypedLine =
+    !!current.lastUserText &&
+    s.userMessageCount > current.userMessageCount &&
+    !!s.lastUserText &&
+    s.lastUserText !== current.lastUserText &&
+    !isSidecar(s);
+  if (newTypedLine) return false;
+  if (recent(current.lastTimestamp, s.timestamp, BURST_WINDOW_MS)) return true;
+  if (!recent(current.lastTimestamp, s.timestamp, SIDECAR_WINDOW_MS)) return false;
+  return isSidecar(s) || isSidecar(current);
+}
+
+function isSidecar(s: Pick<TurnSummary, "lastUserText" | "toolCount" | "mcpCount" | "messageCount">): boolean {
+  if (!s.lastUserText.trim()) return true;
+  const tools = s.toolCount + s.mcpCount;
+  if (tools === 0) return true;
+  if (tools <= 2 && s.messageCount <= 3) return true;
+  return false;
+}
+
+function recent(prevIso: string, nextIso: string, windowMs: number): boolean {
+  const a = Date.parse(prevIso);
+  const b = Date.parse(nextIso);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return Math.abs(b - a) <= windowMs;
+}
+
+function attach(current: WalkGroup, s: TurnSummary): void {
+  current.callIds.push(s.id);
+  current.callCount += 1;
+  current.billedTokens += s.totals.total;
+  current.lastTimestamp = s.timestamp;
+  current.latestTokens = s.totals.total;
+  current.latestTotals = s.totals;
+  current.model = s.model;
+  if (s.status === "in_flight" || current.status === "in_flight") {
+    current.status = "in_flight";
+  } else if (s.status === "error") {
+    current.status = "error";
+  } else if (current.status !== "error") {
+    current.status = s.status;
+  }
+  const preview = displayPreview(s);
+  if (!isSidecar(s) && s.lastUserText) {
+    current.lastUserText = s.lastUserText;
+    current.userMessageCount = s.userMessageCount;
+    current.groupKey = s.groupKey;
+    current.preview = preview;
+  } else if (
+    (!current.lastUserText || current.preview.startsWith("/")) &&
+    preview &&
+    !preview.startsWith("/")
+  ) {
+    current.preview = preview;
+    if (s.lastUserText) {
+      current.lastUserText = s.lastUserText;
+      current.userMessageCount = s.userMessageCount;
+      current.groupKey = s.groupKey;
+    }
+  }
+}
+
+function displayPreview(s: TurnSummary): string {
+  if (s.lastUserText) return s.lastUserText;
+  if (s.preview && s.preview !== s.path) return s.preview;
+  return s.preview || s.path;
 }
 
 export function fixedTokens(totals: TokenTotals): number {

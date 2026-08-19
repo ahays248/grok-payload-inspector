@@ -60,6 +60,41 @@ describe("groupUserTurns", () => {
     ]);
     expect(groups).toHaveLength(2);
   });
+
+  it("folds empty-fingerprint and auto-title sidecars into the Hello! turn", () => {
+    const groups = groupUserTurns([
+      summary({
+        id: "probe",
+        groupKey: "0::",
+        lastUserText: "",
+        userMessageCount: 0,
+        preview: "/v1/responses",
+        toolCount: 0,
+        mcpCount: 0,
+        timestamp: "2026-08-19T00:00:01.000Z",
+      }),
+      summary({
+        id: "hello",
+        groupKey: "1::Hello!",
+        timestamp: "2026-08-19T00:00:01.200Z",
+      }),
+      summary({
+        id: "title",
+        groupKey: "1::Write a 4-word title for this chat",
+        lastUserText: "Write a 4-word title for this chat",
+        preview: "Write a 4-word title for this chat",
+        userMessageCount: 1,
+        toolCount: 0,
+        mcpCount: 0,
+        messageCount: 1,
+        timestamp: "2026-08-19T00:00:02.000Z",
+      }),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].callCount).toBe(3);
+    expect(groups[0].preview).toBe("Hello!");
+    expect(groups[0].callIds).toEqual(["probe", "hello", "title"]);
+  });
 });
 
 describe("computeStats", () => {

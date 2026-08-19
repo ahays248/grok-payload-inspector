@@ -90,6 +90,21 @@ describe("parseTurnFromRequest", () => {
     expect(turn.userMessageCount).toBe(1);
     expect(turn.groupKey).toBe("1::Hello!");
   });
+
+  it("treats Responses input_text items without a role as the user message", () => {
+    const turn = parseTurnFromRequest({
+      id: "t2",
+      timestamp: "2026-08-19T00:00:00.000Z",
+      method: "POST",
+      path: "/v1/responses",
+      requestText: JSON.stringify({
+        model: "grok-4.6",
+        input: [{ type: "input_text", text: "Hello!" }],
+      }),
+    });
+    expect(turn.lastUserText).toBe("Hello!");
+    expect(turn.userMessageCount).toBe(1);
+  });
 });
 
 describe("splitSystemPrompt", () => {
