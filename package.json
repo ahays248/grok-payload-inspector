@@ -1,0 +1,37 @@
+{
+  "name": "grok-payload-inspector",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Unofficial local dashboard for inspecting Grok Build request payloads. Not affiliated with xAI.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ahays248/grok-payload-inspector.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n proxy,web -c cyan,magenta \"npm run dev:proxy\" \"npm run dev:web\"",
+    "dev:proxy": "tsx watch server/index.ts",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "tsx server/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.1.2",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7",
+    "vitest": "^3.2.3"
+  }
+}
