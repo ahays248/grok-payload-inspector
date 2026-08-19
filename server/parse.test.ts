@@ -91,6 +91,32 @@ describe("parseTurnFromRequest", () => {
     expect(turn.groupKey).toBe("1::Hello!");
   });
 
+  it("keys grouping on <user_query>, ignoring injected system-reminder user blobs", () => {
+    const turn = parseTurnFromRequest({
+      id: "t3",
+      timestamp: "2026-08-19T00:00:00.000Z",
+      method: "POST",
+      path: "/v1/responses",
+      requestText: JSON.stringify({
+        model: "grok-4.6",
+        input: [
+          { type: "message", role: "user", content: "<user_info>\nOS Version: windows\n</user_info>" },
+          { type: "message", role: "user", content: "<system-reminder>\nSkills list\n</system-reminder>" },
+          { type: "message", role: "user", content: "<user_query>\nhello\n</user_query>" },
+          {
+            type: "message",
+            role: "user",
+            content:
+              "<system-reminder>Write an ultra-short dashboard line that captures the AGENT'S REPLY</system-reminder>",
+          },
+        ],
+      }),
+    });
+    expect(turn.lastUserText).toBe("hello");
+    expect(turn.userMessageCount).toBe(1);
+    expect(turn.groupKey).toBe("1::hello");
+  });
+
   it("treats Responses input_text items without a role as the user message", () => {
     const turn = parseTurnFromRequest({
       id: "t2",

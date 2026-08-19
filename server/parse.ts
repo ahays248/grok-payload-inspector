@@ -196,19 +196,52 @@ export function isUserMessage(m: { role?: string; type?: string }): boolean {
   return type === "message" || type === "input_text";
 }
 
+const USER_QUERY_RE = /<user_query>\s*([\s\S]*?)\s*<\/user_query>/gi;
+
+export function extractUserQueries(text: string): string[] {
+  const out: string[] = [];
+  const re = new RegExp(USER_QUERY_RE.source, "gi");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const q = m[1].replace(/\s+/g, " ").trim();
+    if (q) out.push(q);
+  }
+  return out;
+}
+
+function isInjectedBlob(text: string): boolean {
+  const t = text.trim();
+  return (
+    t.startsWith("<system-reminder>") ||
+    t.startsWith("<user_info>") ||
+    t.startsWith("<environment") ||
+    t.startsWith("<agent_info")
+  );
+}
+
 export function conversationFingerprint(messages: ChatMessage[]): {
   lastUserText: string;
   userMessageCount: number;
   groupKey: string;
 } {
-  const users = messages.filter((m) => isUserMessage(m));
-  const lastUserText = (users[users.length - 1]?.text ?? "").replace(/\s+/g, " ").trim();
-  const userMessageCount = users.length;
-  const preview = lastUserText.slice(0, 240);
+  const queries: string[] = [];
+  for (const m of messages) queries.push(...extractUserQueries(m.text ?? ""));
+  if (queries.length > 0) {
+    const lastUserText = queries[queries.length - 1].slice(0, 240);
+    return {
+      lastUserText,
+      userMessageCount: queries.length,
+      groupKey: `${queries.length}::${lastUserText}`,
+    };
+  }
+  const users = messages.filter(
+    (m) => isUserMessage(m) && !isInjectedBlob(m.text ?? "")
+  );
+  const lastUserText = (users[users.length - 1]?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 240);
   return {
-    lastUserText: preview,
-    userMessageCount,
-    groupKey: `${userMessageCount}::${preview}`,
+    lastUserText,
+    userMessageCount: users.length,
+    groupKey: `${users.length}::${lastUserText}`,
   };
 }
 
@@ -267,7 +300,15 @@ export function applyResponse(turn: Turn, raw: string): Turn {
 }
 
 export function summarizePreview(turn: Pick<Turn, "messages" | "path">): string {
-  const user = [...turn.messages].reverse().find((m) => isUserMessage(m));
+  const queries: string[] = [];
+  for (const m of turn.messages) queries.push(...extractUserQueries(m.text ?? ""));
+  if (queries.length > 0) {
+    const line = queries[queries.length - 1];
+    return line.length > 80 ? `${line.slice(0, 77)}…` : line;
+  }
+  const user = [...turn.messages]
+    .reverse()
+    .find((m) => isUserMessage(m) && !isInjectedBlob(m.text ?? ""));
   if (user?.text) {
     const line = user.text.replace(/\s+/g, " ").trim();
     return line.length > 80 ? `${line.slice(0, 77)}…` : line;
