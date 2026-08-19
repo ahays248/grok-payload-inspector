@@ -101,7 +101,12 @@ describe("parseTurnFromRequest", () => {
         model: "grok-4.6",
         input: [
           { type: "message", role: "user", content: "<user_info>\nOS Version: windows\n</user_info>" },
-          { type: "message", role: "user", content: "<system-reminder>\nSkills list\n</system-reminder>" },
+          {
+            type: "message",
+            role: "user",
+            content:
+              "<system-reminder>\nThe following skills are available for use:\n\n- pdf: Read PDFs.\n  Absolute path: /tmp/pdf/SKILL.md\n</system-reminder>",
+          },
           { type: "message", role: "user", content: "<user_query>\nhello\n</user_query>" },
           {
             type: "message",
@@ -115,6 +120,11 @@ describe("parseTurnFromRequest", () => {
     expect(turn.lastUserText).toBe("hello");
     expect(turn.userMessageCount).toBe(1);
     expect(turn.groupKey).toBe("1::hello");
+    expect(turn.skills.map((s) => s.name)).toEqual(["pdf"]);
+    expect(turn.systemSlices.some((s) => s.title === "Environment")).toBe(true);
+    expect(turn.totals.system).toBeGreaterThan(0);
+    expect(turn.totals.skills).toBeGreaterThan(0);
+    expect(turn.messages.every((m) => !m.text.includes("<user_info>"))).toBe(true);
   });
 
   it("treats Responses input_text items without a role as the user message", () => {

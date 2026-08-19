@@ -244,10 +244,10 @@ export default function App() {
                   </div>
                   <h1 className="text-xl font-semibold">
                     {formatTokens(stats.billedTokens)}{" "}
-                    <span className="text-muted">billed</span>
+                    <span className="text-muted">billed across {stats.callCount} calls</span>
                     <span className="mx-2 text-muted/50">·</span>
                     {formatTokens(stats.latestTokens)}{" "}
-                    <span className="text-muted">latest</span>
+                    <span className="text-muted">latest window</span>
                   </h1>
                 </div>
                 <div className="text-right font-mono text-[11px] text-muted">

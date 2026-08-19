@@ -126,17 +126,21 @@ export function parseTurnFromRequest(args: {
   const model = typeof j.model === "string" ? j.model : modelFromPath(args.path);
 
   const systemText = collectSystemText(j);
-  const { skills, blockTokens: skillTokens, rest: systemRest } =
-    extractSkills(systemText);
-
-  const systemSlices = splitSystemPrompt(systemRest);
-  const systemTokens = systemSlices.reduce((n, s) => n + s.tokens, 0);
+  const extracted = extractSkills(systemText);
+  const skillsFromInstructions = extracted.skills;
+  const skillTokensFromInstructions = extracted.blockTokens;
+  const slicesFromInstructions = splitSystemPrompt(extracted.rest);
 
   const allTools = collectTools(j);
   const tools = allTools.filter((t) => t.kind === "native");
   const mcpTools = allTools.filter((t) => t.kind === "mcp");
 
-  const messages = collectMessages(j);
+  const peeled = peelInjectedMessages(collectMessages(j));
+  const skills = [...skillsFromInstructions, ...peeled.skills];
+  const skillTokens = skillTokensFromInstructions + peeled.skillTokens;
+  const systemSlices = [...slicesFromInstructions, ...peeled.systemSlices];
+  const systemTokens = systemSlices.reduce((n, s) => n + s.tokens, 0);
+  const messages = peeled.messages;
   const messageTokens = messages.reduce((n, m) => n + m.tokens, 0);
 
   const params = collectParams(j);
@@ -217,6 +221,51 @@ function isInjectedBlob(text: string): boolean {
     t.startsWith("<environment") ||
     t.startsWith("<agent_info")
   );
+}
+
+export function peelInjectedMessages(messages: ChatMessage[]): {
+  messages: ChatMessage[];
+  systemSlices: PromptSlice[];
+  skills: SkillSlice[];
+  skillTokens: number;
+} {
+  const kept: ChatMessage[] = [];
+  const systemSlices: PromptSlice[] = [];
+  const skills: SkillSlice[] = [];
+  let skillTokens = 0;
+  let i = 0;
+  for (const m of messages) {
+    const text = (m.text ?? "").trim();
+    if (extractUserQueries(text).length > 0 || !isUserMessage(m)) {
+      kept.push(m);
+      continue;
+    }
+    if (/following skills are available/i.test(text)) {
+      const ex = extractSkills(text);
+      skills.push(...ex.skills);
+      skillTokens += ex.blockTokens || m.tokens || estimateTokens(text);
+      continue;
+    }
+    if (isInjectedBlob(text)) {
+      i += 1;
+      systemSlices.push({
+        id: `inj-${i}`,
+        title: injectedTitle(text),
+        text,
+        tokens: m.tokens || estimateTokens(text),
+      });
+      continue;
+    }
+    kept.push(m);
+  }
+  return { messages: kept, systemSlices, skills, skillTokens };
+}
+
+function injectedTitle(text: string): string {
+  if (text.includes("<user_info>")) return "Environment";
+  if (/MCP servers connected/i.test(text)) return "MCP announcements";
+  if (/dashboard line/i.test(text)) return "Dashboard line prompt";
+  return "Host reminder";
 }
 
 export function conversationFingerprint(messages: ChatMessage[]): {

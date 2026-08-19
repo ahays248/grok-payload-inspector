@@ -118,7 +118,7 @@ function shouldAttach(current: WalkGroup, s: TurnSummary): boolean {
   return isSidecar(s) || isSidecar(current);
 }
 
-function isSidecar(s: Pick<TurnSummary, "lastUserText" | "toolCount" | "mcpCount" | "messageCount">): boolean {
+export function isSidecar(s: Pick<TurnSummary, "lastUserText" | "toolCount" | "mcpCount" | "messageCount">): boolean {
   if (!s.lastUserText.trim()) return true;
   const tools = s.toolCount + s.mcpCount;
   if (tools === 0) return true;
@@ -195,10 +195,12 @@ export function computeStats(summaries: TurnSummary[]): SessionStats {
   const groups = groupUserTurns(summaries);
   const series: SessionPoint[] = [];
   let billed = 0;
-  let prevTotal = 0;
+  let prevMainMessages = 0;
   for (const s of ordered) {
     billed += s.totals.total;
-    const compacted = prevTotal > 0 && s.totals.messages < prevTotal * 0.7;
+    const sidecar = isSidecar(s);
+    const compacted =
+      !sidecar && prevMainMessages > 0 && s.totals.messages < prevMainMessages * 0.7;
     const group = groups.find((g) => g.callIds.includes(s.id));
     series.push({
       turnId: s.id,
@@ -208,7 +210,7 @@ export function computeStats(summaries: TurnSummary[]): SessionStats {
       groupId: group?.id ?? s.groupKey,
       compacted,
     });
-    prevTotal = s.totals.messages;
+    if (!sidecar) prevMainMessages = s.totals.messages;
   }
   const latest = ordered[ordered.length - 1];
   return {
