@@ -61,8 +61,9 @@ Token counts are a chars÷4 **ranking**, not a bill. Compare a `Hello!` with `/c
 - Runs at `127.0.0.1` only.
 - Authorization headers are forwarded to xAI and **never written to disk or shown in the UI**.
 - Recordings stay on **your** computer under `~/.payload-inspector/logs`. They are not in this repository and are not uploaded anywhere.
+- Each `npm run dev` starts **empty**. The last session is not reloaded. Set `PAYLOAD_INSPECTOR_RESUME=1` if you explicitly want the previous file.
 - **Do not commit, gist, or publish recordings.** They include Grok Build’s system prompt and tool schemas (xAI’s materials) plus your own conversation. That is the part that would get you in trouble, not this repo.
-- Click **New recording** in the dashboard to archive the current file locally and start empty.
+- Click **New recording** in the dashboard to archive the current file locally and start empty. You can also delete the `~/.payload-inspector` folder.
 
 ## What this repo does *not* contain
 

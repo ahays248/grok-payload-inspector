@@ -75,6 +75,17 @@ export function rotateRecording(): void {
   fs.renameSync(file, dest);
 }
 
+/** Drop the current file so a new process does not reload the last session. */
+export function startFresh(): void {
+  written.clear();
+  try {
+    const file = recordingPath();
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  } catch {
+    // ignore
+  }
+}
+
 function turnFromLine(parsed: unknown): Turn | null {
   if (!parsed || typeof parsed !== "object" || !("turn" in parsed)) return null;
   const raw = (parsed as { turn: unknown }).turn;

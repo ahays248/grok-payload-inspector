@@ -1,4 +1,4 @@
-import { appendTurn, loadTurns, rotateRecording } from "./persist";
+import { appendTurn, loadTurns, rotateRecording, startFresh } from "./persist";
 import { computeStats, groupUserTurns, toSummary } from "./session";
 import type {
   ProxyInfo,
@@ -13,7 +13,10 @@ import type {
 const MAX_TURNS = 500;
 const MAX_TRAFFIC = 200;
 
-const turns: Turn[] = loadTurns(MAX_TURNS);
+const turns: Turn[] =
+  process.env.PAYLOAD_INSPECTOR_RESUME === "1"
+    ? loadTurns(MAX_TURNS)
+    : (startFresh(), []);
 const traffic: TrafficEvent[] = [];
 const clients = new Set<(payload: SsePayload) => void>();
 

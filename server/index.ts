@@ -222,7 +222,7 @@ function printBanner(): void {
   console.log(`  ${dim("Proxy")}       ${cyan(base)}`);
   console.log(`  ${dim("Dashboard")}   ${cyan("http://localhost:5173")}  ${dim("(dev)")}`);
   console.log(`  ${dim("Upstream")}    https://${UPSTREAM_HOST}`);
-  console.log(`  ${dim("Recordings")}  ${dim("~/.payload-inspector/logs  (this machine only)")}`);
+  console.log(`  ${dim("Recordings")}  ${dim("~/.payload-inspector/logs  (this run only; not reloaded)")}`);
   console.log(rule);
   console.log("");
   console.log("  In another terminal:");
